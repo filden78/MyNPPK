@@ -6,6 +6,7 @@ plugins {
 
 dependencies {
     implementation(libs.material3)
+    implementation(libs.androidx.core.ktx)
     implementation(project(":shared-group"))
 }
 
@@ -14,7 +15,7 @@ android {
         jvmTarget = "11"
     }
 
-    namespace = "com.example.schedule.feature.ui"
+    namespace = "com.example.schedule.feature.schedule"
     compileSdk = 34
 
     defaultConfig {

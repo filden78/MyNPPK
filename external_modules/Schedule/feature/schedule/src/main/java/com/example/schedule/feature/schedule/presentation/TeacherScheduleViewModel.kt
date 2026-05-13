@@ -5,21 +5,33 @@ import androidx.lifecycle.viewModelScope
 import com.example.schedule.shared.date.domain.usecase.GetDatesAroundTodayUseCase
 import com.example.schedule.shared.date.domain.usecase.GetTodayUseCase
 import com.example.schedule.shared.group.domain.entity.Group
+import com.example.schedule.shared.schedule.domain.repository.TeacherPreferencesRepository
 import com.example.schedule.shared.schedule.domain.usecase.GetTeacherScheduleUseCase
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 class TeacherScheduleViewModel(
     private val getTodayUseCase: GetTodayUseCase,
     private val getDatesAroundTodayUseCase: GetDatesAroundTodayUseCase,
-    private val getTeacherScheduleUseCase: GetTeacherScheduleUseCase
+    private val getTeacherScheduleUseCase: GetTeacherScheduleUseCase,
+    private val preferencesRepository: TeacherPreferencesRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<State>(State.Initial)
     val state: StateFlow<State> = _state
 
     private val teacherGroup = Group(-1, "Преподаватель")
+
+    init {
+        viewModelScope.launch {
+            preferencesRepository.getSubscriptionsFlow()
+                .drop(1) // Пропускаем начальное значение, так как оно загрузится в loadInitialData
+                .collect {
+                    reloadCurrentSchedule()
+                }
+        }
+    }
 
     fun loadInitialData() {
         if (_state.value != State.Initial) return
@@ -97,5 +109,25 @@ class TeacherScheduleViewModel(
         val newList = scheduleStateList.toMutableList()
         newList[index] = newState
         return copy(scheduleStateList = newList)
+    }
+
+    fun selectDate(date: LocalDate) {
+        val content = _state.value as? State.Content ?: return
+        val index = content.scheduleStateList.indexOfFirst { it.date == date }
+        if (index != -1) {
+            updateSelectedScheduleIndex(index)
+        }
+    }
+
+    fun reloadCurrentSchedule() {
+        val content = _state.value as? State.Content ?: return
+
+        // ПОЛНОСТЬЮ сбрасываем кэш всех дней, чтобы при свайпе загружались новые пары
+        val resetStates = getDatesAroundTodayUseCase(500, 500).map { ScheduleState.ReadyToLoad(it) }
+
+        _state.value = content.copy(scheduleStateList = resetStates)
+
+        // Запускаем загрузку для текущего дня
+        loadSchedule(content.selectedScheduleIndex)
     }
 }
